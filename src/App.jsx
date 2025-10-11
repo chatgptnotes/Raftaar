@@ -5,6 +5,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Driver from './pages/Driver';
 import CreateDriver from './pages/CreateDriver';
+import EditDriver from './pages/EditDriver';
 import ProtectedRoute from './components/ProtectedRoute';
 
 const App = () => {
@@ -34,6 +35,14 @@ const App = () => {
           element={
             <ProtectedRoute>
               <CreateDriver />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/dashboard/driver/edit/:id"
+          element={
+            <ProtectedRoute>
+              <EditDriver />
             </ProtectedRoute>
           }
         />

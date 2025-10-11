@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import Sidebar from '../components/Sidebar';
@@ -7,13 +7,15 @@ import { useJsApiLoader, GoogleMap, Marker, Autocomplete } from '@react-google-m
 
 const libraries = ['places'];
 
-const CreateDriver = () => {
+const EditDriver = () => {
+  const { id } = useParams();
   const navigate = useNavigate();
   const { signOut } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [fetchLoading, setFetchLoading] = useState(true);
   const [uploadProgress, setUploadProgress] = useState('');
   const [autocomplete, setAutocomplete] = useState(null);
-  const [mapCenter, setMapCenter] = useState({ lat: 28.6139, lng: 77.2090 }); // Default: Delhi
+  const [mapCenter, setMapCenter] = useState({ lat: 28.6139, lng: 77.2090 });
   const [markerPosition, setMarkerPosition] = useState(null);
 
   // Image preview states
@@ -50,6 +52,67 @@ const CreateDriver = () => {
     libraries,
   });
 
+  useEffect(() => {
+    fetchDriverData();
+  }, [id]);
+
+  const fetchDriverData = async () => {
+    try {
+      setFetchLoading(true);
+      const { data, error } = await supabase
+        .from('drivers')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        setFormData({
+          firstName: data.first_name || '',
+          lastName: data.last_name || '',
+          phone: data.phone || '',
+          profileImage: null,
+          vehicleImage: null,
+          vehicleProof: null,
+          driverProof: null,
+          serviceType: data.service_type || '',
+          vehicleModel: data.vehicle_model || '',
+          vehicleNumber: data.vehicle_number || '',
+          address: data.address || '',
+          city: data.city || '',
+          pinCode: data.pin_code || '',
+          location: {
+            lat: data.latitude,
+            lng: data.longitude,
+            formattedAddress: data.address || '',
+          },
+        });
+
+        // Set existing images as previews
+        setImagePreviews({
+          profileImage: data.profile_image_url,
+          vehicleImage: data.vehicle_image_url,
+          vehicleProof: data.vehicle_proof_url,
+          driverProof: data.driver_proof_url,
+        });
+
+        // Set map position if location exists
+        if (data.latitude && data.longitude) {
+          const pos = { lat: data.latitude, lng: data.longitude };
+          setMapCenter(pos);
+          setMarkerPosition(pos);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching driver:', error);
+      alert('Failed to load driver data: ' + error.message);
+      navigate('/dashboard/driver');
+    } finally {
+      setFetchLoading(false);
+    }
+  };
+
   const handleLogout = async () => {
     try {
       await signOut();
@@ -69,13 +132,8 @@ const CreateDriver = () => {
     const file = files[0];
 
     if (file) {
-      // Create preview URL
       const previewUrl = URL.createObjectURL(file);
-
-      // Update form data
       setFormData({ ...formData, [name]: file });
-
-      // Update preview
       setImagePreviews({ ...imagePreviews, [name]: previewUrl });
     }
   };
@@ -92,7 +150,6 @@ const CreateDriver = () => {
         const lat = place.geometry.location.lat();
         const lng = place.geometry.location.lng();
 
-        // Extract address components
         let city = '';
         let pinCode = '';
         let address = place.formatted_address || '';
@@ -106,11 +163,9 @@ const CreateDriver = () => {
           }
         });
 
-        // Update map center and marker
         setMapCenter({ lat, lng });
         setMarkerPosition({ lat, lng });
 
-        // Update form data
         setFormData({
           ...formData,
           address,
@@ -148,57 +203,73 @@ const CreateDriver = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setUploadProgress('Starting upload...');
+    setUploadProgress('Starting update...');
 
     try {
-      // Upload files to Supabase Storage
-      setUploadProgress('Uploading profile image...');
-      const profileImageUrl = await uploadFile(formData.profileImage, 'driver-files', 'profiles/');
+      // Upload new files if selected, otherwise keep existing URLs
+      setUploadProgress('Uploading files...');
 
-      setUploadProgress('Uploading vehicle image...');
-      const vehicleImageUrl = await uploadFile(formData.vehicleImage, 'driver-files', 'vehicles/');
+      const profileImageUrl = formData.profileImage
+        ? await uploadFile(formData.profileImage, 'driver-files', 'profiles/')
+        : imagePreviews.profileImage;
 
-      setUploadProgress('Uploading vehicle proof...');
-      const vehicleProofUrl = await uploadFile(formData.vehicleProof, 'driver-files', 'proofs/vehicle/');
+      const vehicleImageUrl = formData.vehicleImage
+        ? await uploadFile(formData.vehicleImage, 'driver-files', 'vehicles/')
+        : imagePreviews.vehicleImage;
 
-      setUploadProgress('Uploading driver proof...');
-      const driverProofUrl = await uploadFile(formData.driverProof, 'driver-files', 'proofs/driver/');
+      const vehicleProofUrl = formData.vehicleProof
+        ? await uploadFile(formData.vehicleProof, 'driver-files', 'proofs/vehicle/')
+        : imagePreviews.vehicleProof;
 
-      // Insert driver data into database
-      setUploadProgress('Saving driver information...');
-      const { data, error } = await supabase
+      const driverProofUrl = formData.driverProof
+        ? await uploadFile(formData.driverProof, 'driver-files', 'proofs/driver/')
+        : imagePreviews.driverProof;
+
+      // Update driver data in database
+      setUploadProgress('Updating driver information...');
+      const { error } = await supabase
         .from('drivers')
-        .insert([
-          {
-            first_name: formData.firstName,
-            last_name: formData.lastName,
-            phone: formData.phone,
-            address: formData.address,
-            city: formData.city,
-            pin_code: formData.pinCode,
-            vehicle_model: formData.vehicleModel,
-            vehicle_number: formData.vehicleNumber,
-            service_type: formData.serviceType,
-            profile_image_url: profileImageUrl,
-            vehicle_image_url: vehicleImageUrl,
-            vehicle_proof_url: vehicleProofUrl,
-            driver_proof_url: driverProofUrl,
-          },
-        ])
-        .select();
+        .update({
+          first_name: formData.firstName,
+          last_name: formData.lastName,
+          phone: formData.phone,
+          address: formData.address,
+          city: formData.city,
+          pin_code: formData.pinCode,
+          vehicle_model: formData.vehicleModel,
+          vehicle_number: formData.vehicleNumber,
+          service_type: formData.serviceType,
+          profile_image_url: profileImageUrl,
+          vehicle_image_url: vehicleImageUrl,
+          vehicle_proof_url: vehicleProofUrl,
+          driver_proof_url: driverProofUrl,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id);
 
       if (error) throw error;
 
-      alert('Driver created successfully!');
+      alert('Driver updated successfully!');
       navigate('/dashboard/driver');
     } catch (error) {
-      console.error('Error creating driver:', error);
-      alert('Failed to create driver: ' + error.message);
+      console.error('Error updating driver:', error);
+      alert('Failed to update driver: ' + error.message);
     } finally {
       setLoading(false);
       setUploadProgress('');
     }
   };
+
+  if (fetchLoading) {
+    return (
+      <div className="flex min-h-screen bg-gray-50 items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin text-6xl mb-4">🚗</div>
+          <p className="text-gray-600">Loading driver data...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen bg-gray-50">
@@ -210,7 +281,7 @@ const CreateDriver = () => {
           <div className="px-8 py-4">
             <div className="flex justify-between items-center">
               <div>
-                <h1 className="text-2xl font-bold text-gray-800">Create Driver</h1>
+                <h1 className="text-2xl font-bold text-gray-800">Edit Driver</h1>
               </div>
               <div className="flex items-center gap-4">
                 <span className="text-gray-700 font-medium">User Name: admin</span>
@@ -234,7 +305,7 @@ const CreateDriver = () => {
         {/* Main Content */}
         <main className="p-8">
           <div className="bg-white rounded-2xl shadow-md p-8 max-w-5xl mx-auto">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">Create Driver</h2>
+            <h2 className="text-2xl font-bold text-gray-800 mb-6">Edit Driver Information</h2>
 
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Search for a place */}
@@ -249,6 +320,7 @@ const CreateDriver = () => {
                       type="text"
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="Search location"
+                      defaultValue={formData.address}
                     />
                   </Autocomplete>
                 ) : (
@@ -324,7 +396,7 @@ const CreateDriver = () => {
                 </div>
                 <div>
                   <label className="block text-gray-700 font-medium mb-2">
-                    Profile Image <span className="text-red-500">*</span>
+                    Profile Image
                   </label>
                   <input
                     type="file"
@@ -332,9 +404,8 @@ const CreateDriver = () => {
                     onChange={handleFileChange}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     accept="image/*"
-                    required
                   />
-                  <p className="text-xs text-red-500 mt-1">(img-size.png)</p>
+                  <p className="text-xs text-gray-500 mt-1">Leave empty to keep existing image</p>
                   {imagePreviews.profileImage && (
                     <div className="mt-3">
                       <img
@@ -351,7 +422,7 @@ const CreateDriver = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-gray-700 font-medium mb-2">
-                    Vehicle Image <span className="text-red-500">*</span>
+                    Vehicle Image
                   </label>
                   <input
                     type="file"
@@ -359,9 +430,8 @@ const CreateDriver = () => {
                     onChange={handleFileChange}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     accept="image/*"
-                    required
                   />
-                  <p className="text-xs text-red-500 mt-1">(img-size.png)</p>
+                  <p className="text-xs text-gray-500 mt-1">Leave empty to keep existing image</p>
                   {imagePreviews.vehicleImage && (
                     <div className="mt-3">
                       <img
@@ -374,7 +444,7 @@ const CreateDriver = () => {
                 </div>
                 <div>
                   <label className="block text-gray-700 font-medium mb-2">
-                    Vehicle Proof <span className="text-red-500">*</span>
+                    Vehicle Proof
                   </label>
                   <input
                     type="file"
@@ -382,9 +452,8 @@ const CreateDriver = () => {
                     onChange={handleFileChange}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     accept="image/*"
-                    required
                   />
-                  <p className="text-xs text-red-500 mt-1">(img-size.png)</p>
+                  <p className="text-xs text-gray-500 mt-1">Leave empty to keep existing image</p>
                   {imagePreviews.vehicleProof && (
                     <div className="mt-3">
                       <img
@@ -401,7 +470,7 @@ const CreateDriver = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-gray-700 font-medium mb-2">
-                    Driver Proof <span className="text-red-500">*</span>
+                    Driver Proof
                   </label>
                   <input
                     type="file"
@@ -409,9 +478,8 @@ const CreateDriver = () => {
                     onChange={handleFileChange}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     accept="image/*"
-                    required
                   />
-                  <p className="text-xs text-red-500 mt-1">(img-size.png)</p>
+                  <p className="text-xs text-gray-500 mt-1">Leave empty to keep existing image</p>
                   {imagePreviews.driverProof && (
                     <div className="mt-3">
                       <img
@@ -533,14 +601,21 @@ const CreateDriver = () => {
               )}
 
               {/* Submit Button */}
-              <div className="flex justify-start">
+              <div className="flex justify-start gap-4">
                 <button
                   type="submit"
                   disabled={loading}
                   className="bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 transition font-semibold disabled:bg-blue-400 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   {loading && <span className="animate-spin">⚙️</span>}
-                  {loading ? 'Creating Driver...' : 'Submit'}
+                  {loading ? 'Updating Driver...' : 'Update Driver'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate('/dashboard/driver')}
+                  className="bg-gray-600 text-white px-8 py-3 rounded-lg hover:bg-gray-700 transition font-semibold"
+                >
+                  Cancel
                 </button>
               </div>
             </form>
@@ -551,4 +626,4 @@ const CreateDriver = () => {
   );
 };
 
-export default CreateDriver;
+export default EditDriver;

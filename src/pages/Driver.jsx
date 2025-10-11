@@ -11,6 +11,8 @@ const Driver = () => {
   const [driverData, setDriverData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [selectedDriver, setSelectedDriver] = useState(null);
+  const [showViewModal, setShowViewModal] = useState(false);
 
   useEffect(() => {
     fetchDrivers();
@@ -34,6 +36,15 @@ const Driver = () => {
     }
   };
 
+  const handleView = (driver) => {
+    setSelectedDriver(driver);
+    setShowViewModal(true);
+  };
+
+  const handleEdit = (driverId) => {
+    navigate(`/dashboard/driver/edit/${driverId}`);
+  };
+
   const handleDelete = async (id) => {
     if (!confirm('Are you sure you want to delete this driver?')) return;
 
@@ -53,6 +64,15 @@ const Driver = () => {
       alert('Failed to delete driver: ' + error.message);
     }
   };
+
+  const filteredDrivers = driverData.filter((driver) => {
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      driver.first_name?.toLowerCase().includes(searchLower) ||
+      driver.last_name?.toLowerCase().includes(searchLower) ||
+      driver.id?.toLowerCase().includes(searchLower)
+    );
+  });
 
   const handleLogout = async () => {
     try {
@@ -155,13 +175,13 @@ const Driver = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {driverData.map((driver) => (
+                    {filteredDrivers.map((driver) => (
                       <tr key={driver.id} className="border-b border-gray-100 hover:bg-gray-50 transition">
                         <td className="px-4 py-4 text-gray-600">{driver.id}</td>
                         <td className="px-4 py-4 text-gray-800 font-medium">
                           {driver.first_name} {driver.last_name}
                         </td>
-                        <td className="px-4 py-4 text-gray-600 text-sm">{driver.email}</td>
+                        <td className="px-4 py-4 text-gray-600 text-sm">{driver.email || '-'}</td>
                         <td className="px-4 py-4 text-gray-600">{driver.phone}</td>
                         <td className="px-4 py-4 text-gray-600">{driver.address || '-'}</td>
                         <td className="px-4 py-4 text-gray-600 text-sm">
@@ -169,10 +189,16 @@ const Driver = () => {
                         </td>
                         <td className="px-4 py-4">
                           <div className="flex gap-2">
-                            <button className="bg-green-500 text-white px-3 py-1.5 rounded-md text-sm hover:bg-green-600 transition font-semibold">
+                            <button
+                              onClick={() => handleView(driver)}
+                              className="bg-green-500 text-white px-3 py-1.5 rounded-md text-sm hover:bg-green-600 transition font-semibold"
+                            >
                               View
                             </button>
-                            <button className="bg-orange-500 text-white px-3 py-1.5 rounded-md text-sm hover:bg-orange-600 transition font-semibold">
+                            <button
+                              onClick={() => handleEdit(driver.id)}
+                              className="bg-orange-500 text-white px-3 py-1.5 rounded-md text-sm hover:bg-orange-600 transition font-semibold"
+                            >
                               Edit
                             </button>
                             <button
@@ -206,6 +232,157 @@ const Driver = () => {
           </div>
         </main>
       </div>
+
+      {/* View Modal */}
+      {showViewModal && selectedDriver && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
+              <h3 className="text-2xl font-bold text-gray-800">Driver Details</h3>
+              <button
+                onClick={() => setShowViewModal(false)}
+                className="text-gray-500 hover:text-gray-700 text-2xl font-bold"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-6">
+              {/* Personal Information */}
+              <div>
+                <h4 className="text-lg font-semibold text-gray-800 mb-4 border-b pb-2">Personal Information</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600">First Name</p>
+                    <p className="text-base font-medium text-gray-900">{selectedDriver.first_name}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Last Name</p>
+                    <p className="text-base font-medium text-gray-900">{selectedDriver.last_name}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Phone</p>
+                    <p className="text-base font-medium text-gray-900">{selectedDriver.phone}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Service Type</p>
+                    <p className="text-base font-medium text-gray-900 capitalize">{selectedDriver.service_type}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Address Information */}
+              <div>
+                <h4 className="text-lg font-semibold text-gray-800 mb-4 border-b pb-2">Address</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="md:col-span-3">
+                    <p className="text-sm text-gray-600">Full Address</p>
+                    <p className="text-base font-medium text-gray-900">{selectedDriver.address || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">City</p>
+                    <p className="text-base font-medium text-gray-900">{selectedDriver.city || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Pin Code</p>
+                    <p className="text-base font-medium text-gray-900">{selectedDriver.pin_code || 'N/A'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Vehicle Information */}
+              <div>
+                <h4 className="text-lg font-semibold text-gray-800 mb-4 border-b pb-2">Vehicle Information</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600">Vehicle Model</p>
+                    <p className="text-base font-medium text-gray-900">{selectedDriver.vehicle_model}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Vehicle Number</p>
+                    <p className="text-base font-medium text-gray-900">{selectedDriver.vehicle_number}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Images */}
+              <div>
+                <h4 className="text-lg font-semibold text-gray-800 mb-4 border-b pb-2">Images & Documents</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Profile Image */}
+                  {selectedDriver.profile_image_url && (
+                    <div>
+                      <p className="text-sm text-gray-600 mb-2">Profile Image</p>
+                      <img
+                        src={selectedDriver.profile_image_url}
+                        alt="Profile"
+                        className="w-full h-48 object-cover rounded-lg border-2 border-gray-300"
+                      />
+                    </div>
+                  )}
+
+                  {/* Vehicle Image */}
+                  {selectedDriver.vehicle_image_url && (
+                    <div>
+                      <p className="text-sm text-gray-600 mb-2">Vehicle Image</p>
+                      <img
+                        src={selectedDriver.vehicle_image_url}
+                        alt="Vehicle"
+                        className="w-full h-48 object-cover rounded-lg border-2 border-gray-300"
+                      />
+                    </div>
+                  )}
+
+                  {/* Vehicle Proof */}
+                  {selectedDriver.vehicle_proof_url && (
+                    <div>
+                      <p className="text-sm text-gray-600 mb-2">Vehicle Proof</p>
+                      <img
+                        src={selectedDriver.vehicle_proof_url}
+                        alt="Vehicle Proof"
+                        className="w-full h-48 object-cover rounded-lg border-2 border-gray-300"
+                      />
+                    </div>
+                  )}
+
+                  {/* Driver Proof */}
+                  {selectedDriver.driver_proof_url && (
+                    <div>
+                      <p className="text-sm text-gray-600 mb-2">Driver Proof</p>
+                      <img
+                        src={selectedDriver.driver_proof_url}
+                        alt="Driver Proof"
+                        className="w-full h-48 object-cover rounded-lg border-2 border-gray-300"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="sticky bottom-0 bg-gray-50 px-6 py-4 flex justify-end gap-3 border-t border-gray-200">
+              <button
+                onClick={() => setShowViewModal(false)}
+                className="bg-gray-600 text-white px-6 py-2 rounded-lg hover:bg-gray-700 transition font-semibold"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  setShowViewModal(false);
+                  handleEdit(selectedDriver.id);
+                }}
+                className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition font-semibold"
+              >
+                Edit Driver
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
