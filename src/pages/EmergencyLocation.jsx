@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
+import { supabase } from '../lib/supabase';
+import logo from '../assets/raftaar_seva_logo.png';
 
 const libraries = ['places'];
 
@@ -13,6 +15,9 @@ const EmergencyLocation = () => {
   const [city, setCity] = useState('');
   const [pincode, setPincode] = useState('');
   const [mobile, setMobile] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
 
   // Load Google Maps API
   const { isLoaded, loadError } = useLoadScript({
@@ -111,29 +116,91 @@ const EmergencyLocation = () => {
     setShowModal(false);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Handle form submission
-    console.log({ address, city, pincode, mobile, location: userLocation });
-    alert('Emergency request submitted!');
+
+    // Reset error and success states
+    setSubmitError(null);
+    setSubmitSuccess(false);
+    setIsSubmitting(true);
+
+    try {
+      // Generate a unique booking ID using timestamp
+      const bookingId = `EMG-${Date.now()}`;
+
+      // Prepare the data to insert
+      const bookingData = {
+        booking_id: bookingId,
+        address: address,
+        city: city,
+        pincode: pincode,
+        phone_number: mobile,
+        status: 'pending',
+        // Store location coordinates in remarks for now
+        remarks: userLocation
+          ? `Location: ${userLocation.lat}, ${userLocation.lng}`
+          : null
+      };
+
+      // Insert data into Supabase
+      const { data, error } = await supabase
+        .from('bookings')
+        .insert([bookingData])
+        .select();
+
+      if (error) {
+        throw error;
+      }
+
+      // Success! Show success message
+      setSubmitSuccess(true);
+      console.log('Booking created successfully:', data);
+
+      // Reset form after 2 seconds
+      setTimeout(() => {
+        setAddress('');
+        setCity('');
+        setPincode('');
+        setMobile('');
+        setUserLocation(null);
+        setLocationGranted(false);
+        setSubmitSuccess(false);
+        setShowModal(true); // Show location modal again for next request
+      }, 3000);
+
+    } catch (error) {
+      console.error('Error submitting emergency request:', error);
+      setSubmitError(error.message || 'Failed to submit request. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
-      {/* Header */}
-      <header className="bg-gradient-to-r from-blue-700 via-blue-800 to-blue-900 shadow-2xl sticky top-0 z-40">
-        <div className="container mx-auto px-6 py-5">
+    <div className="min-h-screen bg-gray-50">
+      {/* Main Navbar */}
+      <header className="bg-white shadow-md sticky top-0 z-40 border-b border-gray-200">
+        <div className="container mx-auto px-4 sm:px-6 py-3 sm:py-4">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-white flex items-center gap-2">
-                <span className="text-3xl">🚨</span>
-                Raftaar Help Emergency Seva
-              </h1>
-              <p className="text-blue-200 text-sm mt-1">Real-Time Emergency Response System</p>
+            {/* Logo Section */}
+            <div className="flex items-center gap-3">
+              <img
+                src={logo}
+                alt="Raftaar Seva Logo"
+                className="h-12 sm:h-14 md:h-16 w-auto object-contain"
+              />
+              <div className="hidden lg:block">
+                <h1 className="text-base sm:text-lg md:text-xl font-bold text-gray-900 leading-tight">
+                  Raftaar Help Emergency Seva
+                </h1>
+                <p className="text-xs text-blue-600 mt-0.5">Real-Time Emergency Response System</p>
+              </div>
             </div>
-            <div className="hidden md:flex items-center gap-4">
-              <div className="text-white text-sm">
-                <span className="font-semibold">Emergency Hotline:</span> 112
+
+            {/* Emergency Badge */}
+            <div className="flex items-center gap-3">
+              <div className="bg-red-600 text-white px-4 py-2 rounded-lg font-bold text-sm shadow-lg">
+                EMERGENCY
               </div>
             </div>
           </div>
@@ -142,39 +209,91 @@ const EmergencyLocation = () => {
 
       {/* Location Permission Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 transform animate-scaleIn">
-            <div className="text-center mb-6">
-              <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-5xl">📍</span>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-md flex items-center justify-center z-50 p-4 sm:p-6 md:p-8 animate-fadeIn">
+          <div className="relative bg-gradient-to-br from-white via-white to-red-50 rounded-3xl shadow-2xl max-w-[90%] xs:max-w-sm sm:max-w-md w-full p-6 sm:p-8 md:p-10 transform animate-scaleIn border-2 border-red-100/50 overflow-hidden">
+            {/* Decorative Background Elements */}
+            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-red-400/10 to-orange-400/10 rounded-full blur-3xl -z-0"></div>
+            <div className="absolute bottom-0 left-0 w-40 h-40 bg-gradient-to-tr from-blue-400/10 to-purple-400/10 rounded-full blur-3xl -z-0"></div>
+
+            <div className="relative z-10">
+              {/* Icon Section */}
+              <div className="text-center mb-6 sm:mb-8">
+                <div className="relative inline-block mb-4 sm:mb-6">
+                  {/* Animated Ring */}
+                  <div className="absolute inset-0 w-24 h-24 sm:w-28 sm:h-28 bg-gradient-to-r from-red-400 to-orange-400 rounded-full blur-xl opacity-30 animate-pulse-slow"></div>
+
+                  {/* Main Icon Container */}
+                  <div className="relative w-24 h-24 sm:w-28 sm:h-28 bg-gradient-to-br from-red-400 via-red-500 to-orange-500 rounded-full flex items-center justify-center mx-auto shadow-lg animate-pulse-slow border-4 border-white">
+                    <span className="text-5xl sm:text-6xl animate-bounce-slow filter drop-shadow-lg">📍</span>
+                  </div>
+
+                  {/* Pulsing Rings */}
+                  <div className="absolute -inset-2 border-4 border-red-300/40 rounded-full animate-ping"></div>
+                </div>
+
+                <h2 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-red-500 via-purple-600 to-blue-800 bg-clip-text text-transparent mb-3 sm:mb-4 leading-tight">
+                  Allow Location Access
+                </h2>
+                <p className="text-gray-600 text-sm sm:text-base leading-relaxed px-2">
+                  We need your location to confirm the emergency. Please allow access for better assistance.
+                </p>
               </div>
-              <h2 className="text-2xl font-bold text-gray-800 mb-3">
-                Allow Location Access
-              </h2>
-              <p className="text-gray-600">
-                We need your location to confirm the emergency. Please allow access for better assistance.
-              </p>
-            </div>
-            <div className="space-y-3">
-              <button
-                onClick={handleAllowLocation}
-                className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-4 rounded-xl transition transform hover:scale-105 shadow-lg"
-              >
-                Allow Location
-              </button>
-              <button
-                onClick={handleDeny}
-                className="w-full bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-4 rounded-xl transition"
-              >
-                Deny
-              </button>
+
+              {/* Buttons Section */}
+              <div className="space-y-3 sm:space-y-4">
+                {/* Allow Button */}
+                <button
+                  onClick={handleAllowLocation}
+                  className="group relative w-full bg-gradient-to-r from-red-500 via-red-600 to-orange-500 hover:from-red-600 hover:via-red-700 hover:to-orange-600 text-white font-bold py-4 sm:py-5 px-6 rounded-xl sm:rounded-2xl transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] overflow-hidden"
+                >
+                  {/* Shimmer Effect */}
+                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer"></div>
+                  </div>
+
+                  {/* Button Content */}
+                  <span className="relative flex items-center justify-center gap-2 text-base sm:text-lg">
+                    <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Allow Location
+                  </span>
+
+                  {/* Glow Effect */}
+                  <div className="absolute inset-0 rounded-xl sm:rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity animate-glow"></div>
+                </button>
+
+                {/* Deny Button */}
+                <button
+                  onClick={handleDeny}
+                  className="group relative w-full bg-gradient-to-r from-gray-100 to-gray-200 hover:from-gray-200 hover:to-gray-300 text-gray-700 font-semibold py-4 sm:py-5 px-6 rounded-xl sm:rounded-2xl transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] border border-gray-300/50"
+                >
+                  <span className="relative flex items-center justify-center gap-2 text-base sm:text-lg">
+                    <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    Deny
+                  </span>
+                </button>
+              </div>
+
+              {/* Security Badge */}
+              <div className="mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-gray-200/60">
+                <div className="flex items-center justify-center gap-2 text-xs sm:text-sm text-gray-500">
+                  <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  <span className="font-medium">Your data is secure & private</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       )}
 
       {/* Map Section */}
-      <div className="relative h-96 md:h-[500px] shadow-2xl overflow-hidden">
+      <div className="px-2 mt-2 sm:px-3 sm:mt-3 md:px-4 md:mt-4 lg:px-6 lg:mt-5">
+        <div className="relative w-full h-64 sm:h-80 md:h-96 lg:h-[400px] overflow-hidden rounded-lg shadow-md">
         {loadError && (
           <div className="absolute inset-0 flex items-center justify-center bg-red-50">
             <div className="text-center">
@@ -205,6 +324,13 @@ const EmergencyLocation = () => {
               streetViewControl: false,
               mapTypeControl: false,
               fullscreenControl: true,
+              disableDefaultUI: false,
+              zoomControlOptions: {
+                position: 9, // RIGHT_BOTTOM
+              },
+              fullscreenControlOptions: {
+                position: 9, // RIGHT_BOTTOM
+              },
               styles: [
                 {
                   featureType: 'poi',
@@ -231,9 +357,9 @@ const EmergencyLocation = () => {
         )}
 
         {locationGranted && userLocation && (
-          <div className="absolute top-4 right-4 bg-white/95 backdrop-blur-md px-5 py-3 rounded-xl shadow-2xl z-10 border border-blue-100">
-            <p className="text-xs text-blue-600 font-semibold mb-1">📍 Your Location</p>
-            <p className="text-xs text-gray-500">
+          <div className="absolute top-2 right-2 sm:top-4 sm:right-4 bg-white/95 backdrop-blur-md px-2 py-1.5 sm:px-5 sm:py-3 rounded-lg sm:rounded-xl shadow-lg sm:shadow-2xl z-10 border border-blue-100">
+            <p className="text-[10px] sm:text-xs text-blue-600 font-semibold mb-0.5 sm:mb-1">📍 Location</p>
+            <p className="text-[9px] sm:text-xs text-gray-500">
               {userLocation.lat.toFixed(4)}, {userLocation.lng.toFixed(4)}
             </p>
           </div>
@@ -246,42 +372,34 @@ const EmergencyLocation = () => {
         )}
 
         {locationGranted && (
-          <div className="absolute bottom-4 left-4 bg-blue-600 text-white px-4 py-3 rounded-xl shadow-lg z-10 text-sm max-w-xs">
+          <div className="hidden md:block absolute bottom-4 left-4 bg-blue-600 text-white px-4 py-3 rounded-xl shadow-lg z-10 text-sm max-w-xs">
             <p className="font-semibold mb-1">💡 Quick Tip:</p>
             <p className="text-xs">Drag the red marker or click anywhere on the map to adjust your location</p>
           </div>
         )}
+        </div>
       </div>
 
-      {/* Form Section */}
-      <div className="container mx-auto px-6 py-12">
-        <div className="max-w-2xl mx-auto">
-          {/* Info Cards */}
-          <div className="grid md:grid-cols-3 gap-4 mb-8">
-            <div className="bg-gradient-to-br from-red-500 to-red-600 text-white p-4 rounded-xl shadow-lg text-center">
-              <div className="text-3xl mb-2">🚑</div>
-              <p className="font-semibold">Medical</p>
-              <p className="text-xs mt-1 opacity-90">Ambulance Services</p>
-            </div>
-            <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white p-4 rounded-xl shadow-lg text-center">
-              <div className="text-3xl mb-2">🚒</div>
-              <p className="font-semibold">Fire Brigade</p>
-              <p className="text-xs mt-1 opacity-90">Fire Emergency</p>
-            </div>
-            <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white p-4 rounded-xl shadow-lg text-center">
-              <div className="text-3xl mb-2">👮</div>
-              <p className="font-semibold">Police</p>
-              <p className="text-xs mt-1 opacity-90">Security Services</p>
-            </div>
+      {/* Mobile Tip - Below Map */}
+      {locationGranted && (
+        <div className="md:hidden px-4 mt-3">
+          <div className="bg-blue-50 border-l-4 border-blue-600 px-4 py-3 rounded-r-lg">
+            <p className="text-sm text-blue-900 font-semibold mb-1">💡 Quick Tip:</p>
+            <p className="text-xs text-blue-800">Drag the red marker or click anywhere on the map to adjust your location</p>
           </div>
+        </div>
+      )}
 
+      {/* Form Section */}
+      <div className="container mx-auto px-0 sm:px-6 py-12">
+        <div className="max-w-2xl mx-auto">
           {/* Form Card */}
-          <div className="bg-white rounded-2xl shadow-2xl p-8 md:p-10 border border-gray-100">
-            <div className="flex items-center gap-3 mb-8">
-              <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                <span className="text-2xl">📋</span>
+          <div className="bg-white rounded-2xl p-4 sm:p-6 md:p-8 lg:p-10 border border-gray-100">
+            <div className="flex items-center gap-3 mb-6 sm:mb-8">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                <span className="text-xl sm:text-2xl">📋</span>
               </div>
-              <h2 className="text-3xl font-bold text-gray-800">
+              <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-800">
                 Confirm Your Emergency Location
               </h2>
             </div>
@@ -289,8 +407,7 @@ const EmergencyLocation = () => {
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Address */}
               <div className="group">
-                <label className="block text-gray-700 font-semibold mb-2 flex items-center gap-2">
-                  <span className="text-lg">🏠</span>
+                <label className="block text-gray-700 font-semibold mb-2">
                   Address
                 </label>
                 <input
@@ -298,7 +415,7 @@ const EmergencyLocation = () => {
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
                   placeholder="Enter your full address"
-                  className="w-full px-5 py-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50 focus:bg-white"
+                  className="w-full px-4 py-3 sm:px-5 sm:py-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50 focus:bg-white text-sm sm:text-base"
                   required
                 />
               </div>
@@ -307,8 +424,7 @@ const EmergencyLocation = () => {
               <div className="grid md:grid-cols-2 gap-6">
                 {/* City */}
                 <div className="group">
-                  <label className="block text-gray-700 font-semibold mb-2 flex items-center gap-2">
-                    <span className="text-lg">🏙️</span>
+                  <label className="block text-gray-700 font-semibold mb-2">
                     City
                   </label>
                   <input
@@ -316,15 +432,14 @@ const EmergencyLocation = () => {
                     value={city}
                     onChange={(e) => setCity(e.target.value)}
                     placeholder="Enter your city"
-                    className="w-full px-5 py-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50 focus:bg-white"
+                    className="w-full px-4 py-3 sm:px-5 sm:py-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50 focus:bg-white text-sm sm:text-base"
                     required
                   />
                 </div>
 
                 {/* Pincode */}
                 <div className="group">
-                  <label className="block text-gray-700 font-semibold mb-2 flex items-center gap-2">
-                    <span className="text-lg">📮</span>
+                  <label className="block text-gray-700 font-semibold mb-2">
                     Pincode
                   </label>
                   <input
@@ -333,7 +448,7 @@ const EmergencyLocation = () => {
                     onChange={(e) => setPincode(e.target.value)}
                     placeholder="Enter pincode"
                     maxLength="6"
-                    className="w-full px-5 py-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50 focus:bg-white"
+                    className="w-full px-4 py-3 sm:px-5 sm:py-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50 focus:bg-white text-sm sm:text-base"
                     required
                   />
                 </div>
@@ -341,8 +456,7 @@ const EmergencyLocation = () => {
 
               {/* Mobile Number */}
               <div className="group">
-                <label className="block text-gray-700 font-semibold mb-2 flex items-center gap-2">
-                  <span className="text-lg">📱</span>
+                <label className="block text-gray-700 font-semibold mb-2">
                   Mobile Number
                 </label>
                 <input
@@ -351,57 +465,115 @@ const EmergencyLocation = () => {
                   onChange={(e) => setMobile(e.target.value)}
                   placeholder="Enter your mobile number"
                   maxLength="10"
-                  className="w-full px-5 py-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50 focus:bg-white"
+                  className="w-full px-4 py-3 sm:px-5 sm:py-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50 focus:bg-white text-sm sm:text-base"
                   required
                 />
               </div>
 
+              {/* Success Message */}
+              {submitSuccess && (
+                <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <svg className="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <p className="text-green-700 font-semibold">
+                      Emergency request submitted successfully! We'll contact you shortly.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Error Message */}
+              {submitError && (
+                <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <p className="text-red-700 font-semibold">{submitError}</p>
+                  </div>
+                </div>
+              )}
+
               {/* Submit Button */}
               <button
                 type="submit"
-                className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold py-5 rounded-xl text-lg transition transform hover:scale-105 shadow-2xl hover:shadow-3xl flex items-center justify-center gap-3"
+                disabled={isSubmitting}
+                className={`w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-bold py-3 sm:py-4 md:py-5 rounded-xl text-base sm:text-lg transition transform hover:scale-105 flex items-center justify-center gap-3 ${
+                  isSubmitting ? 'opacity-70 cursor-not-allowed' : ''
+                }`}
               >
-                <span className="text-2xl">🚨</span>
-                Submit Emergency Request
+                {isSubmitting ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Submitting...
+                  </>
+                ) : (
+                  'Submit Emergency Request'
+                )}
               </button>
             </form>
-
-            {/* Trust Indicators */}
-            <div className="mt-8 pt-6 border-t border-gray-200">
-              <div className="flex items-center justify-center gap-8 text-sm text-gray-600">
-                <div className="flex items-center gap-2">
-                  <span className="text-green-500 text-xl">✓</span>
-                  <span>Secure & Private</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-green-500 text-xl">✓</span>
-                  <span>24/7 Available</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-green-500 text-xl">✓</span>
-                  <span>Fast Response</span>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </div>
 
       {/* Footer */}
-      <footer className="bg-gradient-to-r from-blue-800 via-blue-900 to-blue-950 py-8 mt-16 shadow-2xl">
-        <div className="container mx-auto px-6 text-center">
-          <div className="mb-4">
-            <h3 className="text-white font-bold text-lg mb-2">Emergency Contacts</h3>
-            <div className="flex justify-center gap-8 text-blue-200 text-sm">
-              <span>Police: 100</span>
-              <span>Fire: 101</span>
-              <span>Ambulance: 102</span>
-              <span>All: 112</span>
+      <footer className="bg-gradient-to-r from-blue-800 via-blue-900 to-blue-950 py-8 sm:py-10 md:py-12 mt-16 shadow-2xl">
+        <div className="container mx-auto px-6 sm:px-8 md:px-10">
+          {/* Grid Container for Contact and Join Our Team */}
+          <div className="grid md:grid-cols-2 gap-8 md:gap-12 mb-8 md:mb-0">
+            {/* Contact Section */}
+            <div>
+              <h3 className="text-blue-300 font-bold text-xl sm:text-2xl mb-4 sm:mb-6">Contact</h3>
+
+              <div className="space-y-3 sm:space-y-4 text-white">
+                {/* Phone */}
+                <div className="flex items-center gap-3">
+                  <svg className="w-5 h-5 text-blue-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                  </svg>
+                  <span className="text-base sm:text-lg">8412030400</span>
+                </div>
+
+                {/* Email */}
+                <div className="flex items-center gap-3">
+                  <svg className="w-5 h-5 text-blue-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  <span className="text-base sm:text-lg">support@emergencyseva.in</span>
+                </div>
+
+                {/* Address */}
+                <div className="flex gap-3">
+                  <svg className="w-5 h-5 text-blue-300 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <p className="text-sm sm:text-base leading-relaxed">
+                    Emergency Seva office is at 701, Casa royal apartment, Mohan nagar, Nagpur and feel free to visit us for any assistance.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Join Our Team Section */}
+            <div>
+              <h3 className="text-blue-300 font-bold text-xl sm:text-2xl mb-3 sm:mb-4">Join Our Team</h3>
+              <p className="text-white text-sm sm:text-base leading-relaxed">
+                At Emergency Seva, your safety and satisfaction are our top priorities. Whether you need emergency assistance, have a general inquiry, or want to provide feedback, we're just a call or message away.
+              </p>
             </div>
           </div>
-          <div className="border-t border-blue-700 pt-4">
-            <p className="text-blue-300">&copy; Dmnhospadsahares. All rights reserved.</p>
-            <p className="text-blue-400 text-sm mt-2">Your safety is our priority</p>
+
+          {/* Copyright Section */}
+          <div className="mt-8 pt-6 border-t border-blue-700">
+            <p className="text-white text-center text-sm">
+              © 2025 Created By <span className="font-semibold">Drm Software Pvt Ltd</span>
+            </p>
           </div>
         </div>
       </footer>
