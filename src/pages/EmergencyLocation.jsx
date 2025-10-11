@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
+import PhoneInput from 'react-phone-input-2';
+import 'react-phone-input-2/lib/style.css';
 import { supabase } from '../lib/supabase';
 import logo from '../assets/raftaar_seva_logo.png';
 
@@ -459,14 +461,20 @@ const EmergencyLocation = () => {
                 <label className="block text-gray-700 font-semibold mb-2">
                   Mobile Number
                 </label>
-                <input
-                  type="tel"
+                <PhoneInput
+                  country={'in'}
                   value={mobile}
-                  onChange={(e) => setMobile(e.target.value)}
+                  onChange={(phone) => setMobile(phone)}
+                  inputClass="phone-input-custom"
+                  containerClass="phone-container-custom"
+                  buttonClass="phone-button-custom"
+                  dropdownClass="phone-dropdown-custom"
                   placeholder="Enter your mobile number"
-                  maxLength="10"
-                  className="w-full px-4 py-3 sm:px-5 sm:py-4 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50 focus:bg-white text-sm sm:text-base"
-                  required
+                  enableSearch={true}
+                  searchPlaceholder="Search country"
+                  inputProps={{
+                    required: true,
+                  }}
                 />
               </div>
 
