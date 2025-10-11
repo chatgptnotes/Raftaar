@@ -17,6 +17,8 @@ The following Supabase integration has been successfully implemented:
 - ✅ Updated ProtectedRoute with session management
 - ✅ Added loading states and error handling
 - ✅ Integrated logout functionality in all protected pages
+- ✅ Created users table migration with auto-sync to auth.users
+- ✅ Implemented role-based access control (admin/driver/hospital/user)
 
 ### 4. **Driver Management**
 - ✅ Updated Driver list page to fetch from Supabase
@@ -31,11 +33,35 @@ The following Supabase integration has been successfully implemented:
 
 To complete the integration, you need to set up the following in your Supabase Dashboard:
 
-### Step 1: Create Database Tables
+### Step 1: Run Migrations
+
+The project now uses Supabase migrations for database schema management.
+
+**Option A: Using Supabase CLI (Recommended)**
+
+1. Login to Supabase CLI:
+```bash
+supabase login
+```
+
+2. Link to your project:
+```bash
+supabase link --project-ref feuqkbefbfqnqkkfzgwt
+```
+
+3. Push migrations to remote:
+```bash
+supabase db push
+```
+
+**Option B: Manual SQL Execution**
 
 Run these SQL commands in your Supabase SQL Editor:
 
 ```sql
+-- Create users table (from migration: 20251011084829_create_users_table.sql)
+-- This is automatically handled by the migration file in supabase/migrations/
+
 -- Create drivers table
 CREATE TABLE drivers (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -146,7 +172,19 @@ Create an admin user in Supabase Auth for testing:
 3. Enter:
    - Email: `admin@gmail.com`
    - Password: `bhupendra` (or your preferred password)
-4. Click **"Create user"**
+4. Check **"Auto Confirm User"** (to skip email verification)
+5. Click **"Create user"**
+
+**Note**: The `handle_new_user()` trigger will automatically create a record in the `users` table. However, the role will be `user` by default.
+
+6. To set the user as admin, run this SQL in the Supabase SQL Editor:
+
+```sql
+-- Update user role to admin
+UPDATE users
+SET role = 'admin', full_name = 'Admin User'
+WHERE email = 'admin@gmail.com';
+```
 
 ---
 
@@ -206,6 +244,31 @@ npm run dev
 ---
 
 ## 📝 Database Schema
+
+### users table
+
+The `users` table stores application user data and is automatically synchronized with Supabase `auth.users` via triggers.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID | Primary key |
+| auth_user_id | UUID | Reference to auth.users (cascade delete) |
+| email | TEXT | User email (unique) |
+| full_name | TEXT | Full name of user |
+| role | TEXT | User role (admin/driver/hospital/user) |
+| phone | TEXT | Phone number |
+| avatar_url | TEXT | Profile picture URL |
+| is_active | BOOLEAN | Account active status (default: true) |
+| email_verified | BOOLEAN | Email verification status |
+| last_login_at | TIMESTAMP | Last login timestamp |
+| created_at | TIMESTAMP | Account creation timestamp |
+| updated_at | TIMESTAMP | Last update timestamp (auto-updated) |
+
+**Key Features:**
+- Automatic sync with `auth.users` via `handle_new_user()` trigger
+- RLS policies for user access control (users can view/edit own profile, admins can manage all)
+- Auto-updating `updated_at` timestamp on record changes
+- Role-based access control with CHECK constraint
 
 ### drivers table
 | Column | Type | Description |
