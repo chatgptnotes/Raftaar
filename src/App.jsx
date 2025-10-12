@@ -7,6 +7,7 @@ import Driver from './pages/Driver';
 import CreateDriver from './pages/CreateDriver';
 import EditDriver from './pages/EditDriver';
 import Bookings from './pages/Bookings';
+import Hospital from './pages/Hospital';
 import ProtectedRoute from './components/ProtectedRoute';
 
 const App = () => {
@@ -52,6 +53,14 @@ const App = () => {
           element={
             <ProtectedRoute>
               <Bookings />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/dashboard/hospital"
+          element={
+            <ProtectedRoute>
+              <Hospital />
             </ProtectedRoute>
           }
         />

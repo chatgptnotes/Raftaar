@@ -20,12 +20,129 @@ const EmergencyLocation = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [nearestHospital, setNearestHospital] = useState(null);
+  const [hospitalPhone, setHospitalPhone] = useState(null);
+  const [hospitalWebsite, setHospitalWebsite] = useState(null);
 
   // Load Google Maps API
   const { isLoaded, loadError } = useLoadScript({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '',
     libraries,
   });
+
+  // Fetch hospital when location is set and API is loaded
+  useEffect(() => {
+    console.log('==========================================');
+    console.log('🔄 [HOSPITAL SEARCH] useEffect TRIGGERED');
+    console.log('📊 [HOSPITAL SEARCH] isLoaded:', isLoaded);
+    console.log('📍 [HOSPITAL SEARCH] userLocation:', userLocation);
+    console.log('🌍 [HOSPITAL SEARCH] window.google:', !!window.google);
+    console.log('🗺️ [HOSPITAL SEARCH] window.google.maps:', !!window.google?.maps);
+    console.log('📍 [HOSPITAL SEARCH] window.google.maps.places:', !!window.google?.maps?.places);
+    console.log('==========================================');
+
+    if (!isLoaded) {
+      console.log('⏳ [HOSPITAL SEARCH] Waiting for Google Maps API to load...');
+      return;
+    }
+
+    if (!userLocation) {
+      console.log('📍 [HOSPITAL SEARCH] No user location set yet');
+      return;
+    }
+
+    // Check if Google Maps API is properly loaded
+    if (!window.google || !window.google.maps || !window.google.maps.places) {
+      console.error('❌ [HOSPITAL SEARCH] Google Maps Places API not available in window object');
+      console.error('   window.google exists:', !!window.google);
+      console.error('   window.google.maps exists:', !!window.google?.maps);
+      console.error('   window.google.maps.places exists:', !!window.google?.maps?.places);
+      return;
+    }
+
+    console.log('✅ [HOSPITAL SEARCH] All conditions met! Starting search...');
+    console.log('🏥 [HOSPITAL SEARCH] Location:', userLocation);
+
+    const location = new window.google.maps.LatLng(userLocation.lat, userLocation.lng);
+    const service = new window.google.maps.places.PlacesService(document.createElement('div'));
+
+    // Search with increasing radius: 5km -> 10km -> 20km -> 30km
+    const searchWithRadius = (radiusIndex = 0) => {
+      const radiuses = [5000, 10000, 20000, 30000];
+
+      if (radiusIndex >= radiuses.length) {
+        console.log('❌ No hospitals found within 30km');
+        setNearestHospital('No hospital found nearby');
+        setHospitalPhone('N/A');
+        return;
+      }
+
+      const currentRadius = radiuses[radiusIndex];
+      console.log(`🔍 Searching for hospitals within ${currentRadius / 1000}km...`);
+
+      const request = {
+        location: location,
+        radius: currentRadius,
+        type: 'hospital'
+      };
+
+      service.nearbySearch(request, (results, status) => {
+        console.log(`📊 Search at ${currentRadius / 1000}km - Status:`, status);
+
+        if (status === window.google.maps.places.PlacesServiceStatus.OK && results && results.length > 0) {
+          const hospital = results[0];
+          console.log('✅ Nearest hospital found:', hospital.name);
+          setNearestHospital(hospital.name);
+
+          // Get place details for phone number and website
+          if (hospital.place_id) {
+            const detailsRequest = {
+              placeId: hospital.place_id,
+              fields: ['formatted_phone_number', 'international_phone_number', 'website', 'url']
+            };
+
+            service.getDetails(detailsRequest, (place, detailsStatus) => {
+              console.log('📞 Place details status:', detailsStatus);
+              console.log('📊 Available fields:', place);
+
+              if (detailsStatus === window.google.maps.places.PlacesServiceStatus.OK && place) {
+                // Try formatted_phone_number first, then international_phone_number
+                if (place.formatted_phone_number) {
+                  console.log('✅ Hospital formatted phone found:', place.formatted_phone_number);
+                  setHospitalPhone(place.formatted_phone_number);
+                } else if (place.international_phone_number) {
+                  console.log('✅ Hospital international phone found:', place.international_phone_number);
+                  setHospitalPhone(place.international_phone_number);
+                } else {
+                  console.log('⚠️ No phone number available');
+                  setHospitalPhone('Not Available');
+                }
+
+                // Store website if available
+                if (place.website) {
+                  console.log('🌐 Hospital website found:', place.website);
+                  setHospitalWebsite(place.website);
+                } else if (place.url) {
+                  console.log('🌐 Hospital Google Maps URL found:', place.url);
+                  setHospitalWebsite(place.url);
+                } else {
+                  console.log('⚠️ No website available');
+                  setHospitalWebsite(null);
+                }
+              }
+            });
+          }
+        } else if (status === window.google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
+          console.log(`⚠️ No hospitals at ${currentRadius / 1000}km, trying larger radius...`);
+          searchWithRadius(radiusIndex + 1);
+        } else {
+          console.error('❌ Places API error:', status);
+        }
+      });
+    };
+
+    searchWithRadius(0);
+  }, [isLoaded, userLocation]);
 
   // Default center (India)
   const defaultCenter = {
@@ -38,22 +155,202 @@ const EmergencyLocation = () => {
     height: '100%'
   };
 
+  // Standalone function to search nearby hospitals
+  const searchNearbyHospitals = (lat, lng) => {
+    console.log('🏥🏥🏥 [DIRECT CALL] searchNearbyHospitals called with:', lat, lng);
+
+    if (!window.google || !window.google.maps || !window.google.maps.places) {
+      console.error('❌ [DIRECT CALL] Google Maps Places API not available');
+      return;
+    }
+
+    console.log('✅ [DIRECT CALL] Google Maps API available, starting search...');
+
+    const location = new window.google.maps.LatLng(lat, lng);
+    const service = new window.google.maps.places.PlacesService(document.createElement('div'));
+
+    // Try distance-based search first (returns closest hospital)
+    console.log('🎯 [DIRECT CALL] Attempting DISTANCE-BASED search (closest hospital)...');
+
+    const distanceRequest = {
+      location: location,
+      rankBy: window.google.maps.places.RankBy.DISTANCE,
+      type: 'hospital'
+      // Note: Cannot use 'radius' with rankBy.DISTANCE
+    };
+
+    service.nearbySearch(distanceRequest, (results, status) => {
+      console.log('📊 [DIRECT CALL] Distance-based search status:', status);
+
+      if (status === window.google.maps.places.PlacesServiceStatus.OK && results && results.length > 0) {
+        const hospital = results[0];
+        console.log('✅ [DIRECT CALL] CLOSEST hospital found:', hospital.name);
+        console.log('📍 [DIRECT CALL] Hospital address:', hospital.vicinity);
+        setNearestHospital(hospital.name);
+
+        // Get place details for phone number and website
+        if (hospital.place_id) {
+          const detailsRequest = {
+            placeId: hospital.place_id,
+            fields: ['formatted_phone_number', 'international_phone_number', 'website', 'url', 'formatted_address']
+          };
+
+          service.getDetails(detailsRequest, (place, detailsStatus) => {
+            console.log('📞 [DIRECT CALL] Place details status:', detailsStatus);
+            console.log('📊 [DIRECT CALL] Available fields:', {
+              formatted_phone: place?.formatted_phone_number,
+              intl_phone: place?.international_phone_number,
+              website: place?.website,
+              url: place?.url
+            });
+
+            if (detailsStatus === window.google.maps.places.PlacesServiceStatus.OK && place) {
+              // Try formatted_phone_number first, then international_phone_number
+              if (place.formatted_phone_number) {
+                console.log('✅ [DIRECT CALL] Hospital formatted phone found:', place.formatted_phone_number);
+                setHospitalPhone(place.formatted_phone_number);
+              } else if (place.international_phone_number) {
+                console.log('✅ [DIRECT CALL] Hospital international phone found:', place.international_phone_number);
+                setHospitalPhone(place.international_phone_number);
+              } else {
+                console.log('⚠️ [DIRECT CALL] No phone number available');
+                setHospitalPhone('Not Available');
+              }
+
+              // Store website if available
+              if (place.website) {
+                console.log('🌐 [DIRECT CALL] Hospital website found:', place.website);
+                setHospitalWebsite(place.website);
+              } else if (place.url) {
+                console.log('🌐 [DIRECT CALL] Hospital Google Maps URL found:', place.url);
+                setHospitalWebsite(place.url);
+              } else {
+                console.log('⚠️ [DIRECT CALL] No website available');
+                setHospitalWebsite(null);
+              }
+            }
+          });
+        }
+      } else {
+        // Fallback: Try radius-based search if distance-based fails
+        console.warn('⚠️ [DIRECT CALL] Distance-based search failed, falling back to radius-based...');
+        searchWithRadiusFallback(location, service);
+      }
+    });
+  };
+
+  // Fallback: Radius-based search with progressive expansion
+  const searchWithRadiusFallback = (location, service) => {
+    const searchWithRadius = (radiusIndex = 0) => {
+      const radiuses = [5000, 10000, 20000, 30000, 50000]; // 5km, 10km, 20km, 30km, 50km
+
+      if (radiusIndex >= radiuses.length) {
+        console.log('❌ [FALLBACK] No hospitals found within 50km');
+        setNearestHospital('No hospital found nearby');
+        setHospitalPhone('N/A');
+        return;
+      }
+
+      const currentRadius = radiuses[radiusIndex];
+      console.log(`🔍 [FALLBACK] Searching within ${currentRadius / 1000}km radius...`);
+
+      const request = {
+        location: location,
+        radius: currentRadius,
+        type: 'hospital'
+      };
+
+      service.nearbySearch(request, (results, status) => {
+        console.log(`📊 [FALLBACK] Search at ${currentRadius / 1000}km - Status:`, status);
+
+        if (status === window.google.maps.places.PlacesServiceStatus.OK && results && results.length > 0) {
+          const hospital = results[0];
+          console.log('✅ [FALLBACK] Hospital found:', hospital.name);
+          setNearestHospital(hospital.name);
+
+          // Get phone number and website
+          if (hospital.place_id) {
+            const detailsRequest = {
+              placeId: hospital.place_id,
+              fields: ['formatted_phone_number', 'international_phone_number', 'website', 'url']
+            };
+
+            service.getDetails(detailsRequest, (place, detailsStatus) => {
+              console.log('📞 [FALLBACK] Place details status:', detailsStatus);
+              console.log('📊 [FALLBACK] Available fields:', {
+                formatted_phone: place?.formatted_phone_number,
+                intl_phone: place?.international_phone_number,
+                website: place?.website,
+                url: place?.url
+              });
+
+              if (detailsStatus === window.google.maps.places.PlacesServiceStatus.OK && place) {
+                // Try formatted_phone_number first, then international_phone_number
+                if (place.formatted_phone_number) {
+                  console.log('✅ [FALLBACK] Hospital formatted phone found:', place.formatted_phone_number);
+                  setHospitalPhone(place.formatted_phone_number);
+                } else if (place.international_phone_number) {
+                  console.log('✅ [FALLBACK] Hospital international phone found:', place.international_phone_number);
+                  setHospitalPhone(place.international_phone_number);
+                } else {
+                  console.log('⚠️ [FALLBACK] No phone number available');
+                  setHospitalPhone('Not Available');
+                }
+
+                // Store website if available
+                if (place.website) {
+                  console.log('🌐 [FALLBACK] Hospital website found:', place.website);
+                  setHospitalWebsite(place.website);
+                } else if (place.url) {
+                  console.log('🌐 [FALLBACK] Hospital Google Maps URL found:', place.url);
+                  setHospitalWebsite(place.url);
+                } else {
+                  console.log('⚠️ [FALLBACK] No website available');
+                  setHospitalWebsite(null);
+                }
+              }
+            });
+          }
+        } else if (status === window.google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
+          console.log(`⚠️ [FALLBACK] No hospitals at ${currentRadius / 1000}km, trying larger radius...`);
+          searchWithRadius(radiusIndex + 1);
+        } else {
+          console.error('❌ [FALLBACK] Places API error:', status);
+        }
+      });
+    };
+
+    searchWithRadius(0);
+  };
+
   const handleAllowLocation = () => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const { latitude, longitude } = position.coords;
+          console.log('📍 [LOCATION] User location obtained:', latitude, longitude);
+
           setUserLocation({ lat: latitude, lng: longitude });
           setLocationGranted(true);
           setShowModal(false);
 
           // Reverse geocode using Google Geocoding API
           reverseGeocode(latitude, longitude);
+
+          // Search for nearby hospitals directly
+          console.log('🏥 [LOCATION] Calling searchNearbyHospitals directly...');
+          if (isLoaded) {
+            searchNearbyHospitals(latitude, longitude);
+          } else {
+            console.warn('⚠️ [LOCATION] Google Maps not loaded yet, will try via useEffect');
+          }
         },
         (error) => {
           console.error('Error getting location:', error);
-          alert('Unable to get your location. Please enter manually.');
           setShowModal(false);
+          // Set default location instead of showing alert
+          setUserLocation(defaultCenter);
+          setLocationGranted(true);
         }
       );
     } else {
@@ -100,8 +397,14 @@ const EmergencyLocation = () => {
     const newLat = e.latLng.lat();
     const newLng = e.latLng.lng();
 
+    console.log('📍 [MARKER DRAG] New location:', newLat, newLng);
     setUserLocation({ lat: newLat, lng: newLng });
     reverseGeocode(newLat, newLng);
+
+    // Search for nearby hospitals directly
+    if (isLoaded) {
+      searchNearbyHospitals(newLat, newLng);
+    }
   };
 
   // Handle map click
@@ -109,9 +412,15 @@ const EmergencyLocation = () => {
     const newLat = e.latLng.lat();
     const newLng = e.latLng.lng();
 
+    console.log('📍 [MAP CLICK] New location:', newLat, newLng);
     setUserLocation({ lat: newLat, lng: newLng });
     setLocationGranted(true);
     reverseGeocode(newLat, newLng);
+
+    // Search for nearby hospitals directly
+    if (isLoaded) {
+      searchNearbyHospitals(newLat, newLng);
+    }
   };
 
   const handleDeny = () => {
@@ -138,7 +447,10 @@ const EmergencyLocation = () => {
         pincode: pincode,
         phone_number: mobile,
         status: 'pending',
-        // Store location coordinates in remarks for now
+        nearest_hospital: nearestHospital,
+        hospital_phone: hospitalPhone,
+        hospital_website: hospitalWebsite,
+        // Store location coordinates in remarks
         remarks: userLocation
           ? `Location: ${userLocation.lat}, ${userLocation.lng}`
           : null

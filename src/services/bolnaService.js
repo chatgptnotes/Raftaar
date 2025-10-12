@@ -18,26 +18,42 @@ const BOLNA_FROM_NUMBER = import.meta.env.VITE_BOLNA_FROM_NUMBER;
 const formatPhoneNumber = (phoneNumber) => {
   if (!phoneNumber) return null;
 
+  console.log('📱 [Bolna] Original phone number:', phoneNumber);
+
   // Remove all non-digit characters
   const cleaned = phoneNumber.replace(/\D/g, '');
+  console.log('📱 [Bolna] Cleaned phone number:', cleaned);
 
-  // If already has country code, return as is
+  // If already has country code (12 digits starting with 91)
   if (cleaned.startsWith('91') && cleaned.length === 12) {
-    return `+${cleaned}`;
+    const formatted = `+${cleaned}`;
+    console.log('📱 [Bolna] Formatted (already has 91):', formatted);
+    return formatted;
   }
 
   // If 10 digits, add India country code +91
   if (cleaned.length === 10) {
-    return `+91${cleaned}`;
+    const formatted = `+91${cleaned}`;
+    console.log('📱 [Bolna] Formatted (added +91):', formatted);
+    return formatted;
   }
 
   // If already has +, return as is
   if (phoneNumber.startsWith('+')) {
+    console.log('📱 [Bolna] Already has + prefix:', phoneNumber);
     return phoneNumber;
   }
 
-  // Default: assume India and add +91
-  return `+91${cleaned}`;
+  // If 11 digits starting with 1 (some formats), extract last 10
+  if (cleaned.length === 11 && cleaned.startsWith('1')) {
+    const formatted = `+91${cleaned.substring(1)}`;
+    console.log('📱 [Bolna] Formatted (removed leading 1):', formatted);
+    return formatted;
+  }
+
+  // Default: Return null for invalid format
+  console.error('❌ [Bolna] Invalid phone format - length:', cleaned.length);
+  return null;
 };
 
 /**

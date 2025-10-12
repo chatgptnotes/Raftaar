@@ -361,6 +361,7 @@ const Bookings = () => {
                       <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Booking ID</th>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Driver</th>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Address</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Nearest Hospital</th>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Phone</th>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Timing</th>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Distance</th>
@@ -386,6 +387,14 @@ const Bookings = () => {
                         </td>
                         <td className="px-6 py-4 text-gray-700 text-sm max-w-xs truncate">
                           {booking.address ? `${booking.address}${booking.city ? ', ' + booking.city : ''}` : 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 text-gray-700 text-sm">
+                          {booking.nearest_hospital ? (
+                            <div className="flex items-center gap-2">
+                              <span className="text-red-500">🏥</span>
+                              <span>{booking.nearest_hospital}</span>
+                            </div>
+                          ) : 'N/A'}
                         </td>
                         <td className="px-6 py-4 text-gray-700 text-sm">
                           {booking.phone_number || 'N/A'}

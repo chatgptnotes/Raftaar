@@ -10,15 +10,6 @@ const Sidebar = () => {
     { id: 'dashboard', label: 'Dashboard', icon: '🏠', path: '/dashboard/bookings', badge: '13' },
     { id: 'driver', label: 'Driver', icon: '🚗', path: '/dashboard/driver' },
     { id: 'hospital', label: 'Hospital', icon: '🏥', path: '/dashboard/hospital' },
-    { id: 'users', label: 'Manage Users', icon: '👥', path: '/dashboard/users' },
-    { id: 'manual-booking', label: 'Manual Booking', icon: '📝', path: '/dashboard/manual-booking' },
-    { id: 'schedule', label: 'Schedule Booking', icon: '📅', path: '/dashboard/schedule' },
-  ];
-
-  const elements = [
-    { id: 'completed', label: 'Completed Trips', icon: '✅', path: '/dashboard/completed' },
-    { id: 'app-users', label: 'App Users', icon: '📱', path: '/dashboard/app-users' },
-    { id: 'telecaller', label: 'Telecaller Bookings', icon: '📞', path: '/dashboard/telecaller' },
   ];
 
   const handleMenuClick = (item) => {
@@ -78,28 +69,6 @@ const Sidebar = () => {
                   )}
                   <span className="text-gray-400">›</span>
                 </div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Elements Section */}
-        <div className="px-4">
-          <h3 className="text-xs font-semibold text-gray-500 uppercase mb-3 px-2">Elements</h3>
-          <div className="space-y-1">
-            {elements.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => handleMenuClick(item)}
-                className={`w-full px-4 py-2.5 rounded-lg flex items-center justify-between hover:bg-gray-100 transition ${
-                  activeMenu === item.id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-lg">{item.icon}</span>
-                  <span className="font-medium text-sm">{item.label}</span>
-                </div>
-                <span className="text-gray-400">›</span>
               </button>
             ))}
           </div>
