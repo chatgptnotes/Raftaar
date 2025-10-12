@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabaseClient';
 import { makeBolnaCall } from '../services/bolnaService';
 import { autoAssignDriver, findNearestDrivers, assignDriverToBooking } from '../services/driverAssignment';
 import { makeDriverCall } from '../services/bolnaService';
-import DriverCallStatus from '../components/DriverCallStatus';
+import DriverQueueStatus from '../components/DriverQueueStatus';
 
 const Bookings = () => {
   const navigate = useNavigate();
@@ -80,11 +80,20 @@ const Bookings = () => {
             }
           } else if (payload.eventType === 'UPDATE') {
             console.log('✏️ [Bookings] Updating booking:', payload.new);
-            setBookings((prev) =>
-              prev.map((booking) =>
-                booking.id === payload.new.id ? payload.new : booking
-              )
-            );
+
+            // Check if driver_id or status changed - if yes, refetch to get driver join
+            const oldBooking = bookings.find(b => b.id === payload.new.id);
+            if (oldBooking && (oldBooking.driver_id !== payload.new.driver_id || oldBooking.status !== payload.new.status)) {
+              console.log('🔄 [Bookings] Driver or status changed, refetching bookings...');
+              fetchBookings();
+            } else {
+              // Just update the booking data without refetching
+              setBookings((prev) =>
+                prev.map((booking) =>
+                  booking.id === payload.new.id ? { ...booking, ...payload.new } : booking
+                )
+              );
+            }
           } else if (payload.eventType === 'DELETE') {
             console.log('🗑️ [Bookings] Deleting booking:', payload.old);
             setBookings((prev) =>
@@ -673,11 +682,11 @@ const Bookings = () => {
                           )}
                         </td>
                       </tr>
-                      {/* Show call status row if booking has pending calls */}
+                      {/* Show driver queue status if booking is pending */}
                       {!booking.driver_id && booking.status === 'pending' && (
-                        <tr className="bg-yellow-50 border-b border-yellow-200">
+                        <tr className="bg-blue-50 border-b border-blue-200">
                           <td colSpan="11" className="px-6 py-3">
-                            <DriverCallStatus
+                            <DriverQueueStatus
                               bookingId={booking.id}
                               onStatusChange={() => fetchBookings()}
                             />

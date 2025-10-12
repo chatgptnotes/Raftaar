@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabaseClient';
 import { makeDriverCall } from './bolnaService';
-import { monitorDriverCall } from './callMonitoring';
+import { startIntelligentProcessing } from './intelligentReassignment';
 
 /**
  * Calculate distance between two points using Haversine formula
@@ -439,9 +439,9 @@ export const autoAssignDriver = async (booking) => {
       };
     }
 
-    // Start monitoring the call - will auto-fallback after 60 seconds if no response
-    console.log('⏰ [Driver Assignment] Starting call monitor for automatic fallback...');
-    monitorDriverCall(
+    // Start intelligent processing - analyzes transcript and auto-reassigns if declined
+    console.log('🤖 [Driver Assignment] Starting intelligent transcript analysis...');
+    startIntelligentProcessing(
       callResult.queueEntry.id,
       callResult.callResult.data.execution_id,
       booking.id,
@@ -450,12 +450,12 @@ export const autoAssignDriver = async (booking) => {
 
     return {
       success: true,
-      message: 'Driver queue created and first driver called',
+      message: 'Driver queue created and first driver called with intelligent processing',
       queueSize: nearestDrivers.length,
       currentDriver: callResult.driver,
       callStatus: callResult.callResult,
       queueEntryId: callResult.queueEntry.id,
-      note: 'Automatic fallback enabled: Will call next driver after 60 seconds if no response'
+      note: 'Intelligent processing enabled: Will analyze transcript and auto-reassign if driver declines'
     };
   } catch (error) {
     console.error('❌ [Driver Assignment] Auto-assign error:', error);
