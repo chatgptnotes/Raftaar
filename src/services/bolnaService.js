@@ -3,6 +3,8 @@
  * Handles automatic voice call initiation when new bookings arrive
  */
 
+import { supabase } from '../lib/supabaseClient';
+
 const BOLNA_BASE_URL = import.meta.env.VITE_BOLNA_BASE_URL;
 const BOLNA_CALLS_PATH = import.meta.env.VITE_BOLNA_CALLS_PATH;
 const BOLNA_API_URL = `${BOLNA_BASE_URL}${BOLNA_CALLS_PATH}`;
@@ -131,6 +133,24 @@ export const makeBolnaCall = async (phoneNumber, bookingData = {}) => {
       phone: formattedPhone
     });
 
+    // Update booking with call status
+    if (bookingData.id) {
+      try {
+        await supabase
+          .from('bookings')
+          .update({
+            victim_call_made: true,
+            victim_call_time: new Date().toISOString(),
+            victim_call_status: 'success'
+          })
+          .eq('id', bookingData.id);
+
+        console.log('✅ [Bolna] Booking updated with call status');
+      } catch (updateError) {
+        console.error('❌ [Bolna] Failed to update booking:', updateError);
+      }
+    }
+
     return {
       success: true,
       data: data,
@@ -140,6 +160,24 @@ export const makeBolnaCall = async (phoneNumber, bookingData = {}) => {
   } catch (error) {
     console.error('❌ [Bolna] API call failed:', error.message);
     console.error('🔍 [Bolna] Error details:', error);
+
+    // Update booking with failed call status
+    if (bookingData.id) {
+      try {
+        await supabase
+          .from('bookings')
+          .update({
+            victim_call_made: true,
+            victim_call_time: new Date().toISOString(),
+            victim_call_status: 'failed'
+          })
+          .eq('id', bookingData.id);
+
+        console.log('⚠️ [Bolna] Booking updated with failed call status');
+      } catch (updateError) {
+        console.error('❌ [Bolna] Failed to update booking:', updateError);
+      }
+    }
 
     return {
       success: false,
@@ -180,6 +218,13 @@ export const makeDriverCall = async (driverPhone, driverData = {}, bookingData =
     console.log('🚗 [Bolna Driver] Driver:', `${driverData.first_name} ${driverData.last_name}`);
     console.log('📋 [Bolna Driver] Booking ID:', bookingData.booking_id);
 
+    // Get Supabase URL for webhook
+    const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+    const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    const webhookUrl = `${SUPABASE_URL}/functions/v1/bolna-webhook`;
+
+    console.log('🔔 [Bolna Driver] Webhook URL:', webhookUrl);
+
     // Prepare request payload for driver call
     // Variable names must match EXACTLY with Bolna.ai agent configuration
     // Variables: {victim_location}, {nearby_hospital}, {Phone_umber}
@@ -187,6 +232,7 @@ export const makeDriverCall = async (driverPhone, driverData = {}, bookingData =
       agent_id: BOLNA_DRIVER_AGENT_ID,
       recipient_phone_number: formattedPhone,
       from_phone_number: BOLNA_FROM_NUMBER,
+      webhook_url: webhookUrl, // ← CRITICAL: Webhook for instant notifications
       user_data: {
         alert_type: 'Raftaar Ambulance Alert',
         driver_name: `${driverData.first_name} ${driverData.last_name}`,
@@ -226,6 +272,24 @@ export const makeDriverCall = async (driverPhone, driverData = {}, bookingData =
       driver: `${driverData.first_name} ${driverData.last_name}`
     });
 
+    // Update booking with driver call status
+    if (bookingData.booking_id) {
+      try {
+        await supabase
+          .from('bookings')
+          .update({
+            driver_call_made: true,
+            driver_call_time: new Date().toISOString(),
+            driver_call_status: 'success'
+          })
+          .eq('booking_id', bookingData.booking_id);
+
+        console.log('✅ [Bolna Driver] Booking updated with driver call status');
+      } catch (updateError) {
+        console.error('❌ [Bolna Driver] Failed to update booking:', updateError);
+      }
+    }
+
     return {
       success: true,
       data: data,
@@ -235,6 +299,24 @@ export const makeDriverCall = async (driverPhone, driverData = {}, bookingData =
   } catch (error) {
     console.error('❌ [Bolna Driver] API call failed:', error.message);
     console.error('🔍 [Bolna Driver] Error details:', error);
+
+    // Update booking with failed driver call status
+    if (bookingData.booking_id) {
+      try {
+        await supabase
+          .from('bookings')
+          .update({
+            driver_call_made: true,
+            driver_call_time: new Date().toISOString(),
+            driver_call_status: 'failed'
+          })
+          .eq('booking_id', bookingData.booking_id);
+
+        console.log('⚠️ [Bolna Driver] Booking updated with failed driver call status');
+      } catch (updateError) {
+        console.error('❌ [Bolna Driver] Failed to update booking:', updateError);
+      }
+    }
 
     return {
       success: false,

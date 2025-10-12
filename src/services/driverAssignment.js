@@ -200,6 +200,32 @@ export const assignDriverToBooking = async (bookingId, driverId, distance) => {
 };
 
 /**
+ * Clear existing queue for a booking (for retry scenarios)
+ * @param {string} bookingId - Booking ID
+ * @returns {Promise<void>}
+ */
+export const clearDriverQueue = async (bookingId) => {
+  try {
+    console.log('🧹 [Driver Queue] Clearing existing queue for booking...');
+
+    const { error } = await supabase
+      .from('driver_assignment_queue')
+      .delete()
+      .eq('booking_id', bookingId);
+
+    if (error) {
+      console.error('❌ [Driver Queue] Error clearing queue:', error);
+      throw error;
+    }
+
+    console.log('✅ [Driver Queue] Existing queue cleared');
+  } catch (error) {
+    console.error('❌ [Driver Queue] Error clearing queue:', error);
+    throw error;
+  }
+};
+
+/**
  * Store driver queue for a booking (3 nearest drivers)
  * @param {string} bookingId - Booking ID
  * @param {Array} drivers - Array of drivers with distance
@@ -208,6 +234,24 @@ export const assignDriverToBooking = async (bookingId, driverId, distance) => {
 export const storeDriverQueue = async (bookingId, drivers) => {
   try {
     console.log('📋 [Driver Queue] Storing fallback driver queue...');
+
+    // First, check if queue already exists
+    const { data: existingEntries, error: checkError } = await supabase
+      .from('driver_assignment_queue')
+      .select('id, status')
+      .eq('booking_id', bookingId);
+
+    if (!checkError && existingEntries && existingEntries.length > 0) {
+      console.log('⚠️ [Driver Queue] Queue already exists, skipping...');
+      console.log(`   Found ${existingEntries.length} existing entries`);
+      // Return full data with driver info for compatibility
+      const { data: fullQueue } = await supabase
+        .from('driver_assignment_queue')
+        .select('*')
+        .eq('booking_id', bookingId)
+        .order('position');
+      return fullQueue || existingEntries;
+    }
 
     // Create queue entries for top 3 drivers
     const queueEntries = drivers.slice(0, 3).map((driver, index) => ({
@@ -218,12 +262,25 @@ export const storeDriverQueue = async (bookingId, drivers) => {
       distance: `${driver.distance.toFixed(2)} km`
     }));
 
+    console.log('📝 [Driver Queue] Inserting queue entries...');
+
     const { data, error } = await supabase
       .from('driver_assignment_queue')
       .insert(queueEntries)
       .select();
 
     if (error) {
+      // If duplicate key error, just return existing entries
+      if (error.code === '23505' || error.message?.includes('unique constraint')) {
+        console.log('⚠️ [Driver Queue] Duplicate entry detected, returning existing queue');
+        const { data: existing } = await supabase
+          .from('driver_assignment_queue')
+          .select('*')
+          .eq('booking_id', bookingId)
+          .order('position');
+        return existing || [];
+      }
+
       console.error('❌ [Driver Queue] Error storing queue:', error);
       throw error;
     }
@@ -232,6 +289,13 @@ export const storeDriverQueue = async (bookingId, drivers) => {
     return data;
   } catch (error) {
     console.error('❌ [Driver Queue] Error:', error);
+
+    // Silently handle duplicate errors
+    if (error.code === '23505' || error.message?.includes('unique constraint')) {
+      console.log('⚠️ [Driver Queue] Handling duplicate gracefully');
+      return [];
+    }
+
     throw error;
   }
 };
@@ -240,23 +304,113 @@ export const storeDriverQueue = async (bookingId, drivers) => {
  * Update queue entry status and call info
  * @param {string} queueId - Queue entry ID
  * @param {Object} updates - Updates to apply
+ * @param {number} retries - Number of retry attempts (default: 3)
  * @returns {Promise<Object>} Updated queue entry
  */
-export const updateQueueEntry = async (queueId, updates) => {
-  try {
-    const { data, error } = await supabase
-      .from('driver_assignment_queue')
-      .update(updates)
-      .eq('id', queueId)
-      .select()
-      .single();
+export const updateQueueEntry = async (queueId, updates, retries = 3) => {
+  let attempt = 0;
 
-    if (error) throw error;
-    return data;
-  } catch (error) {
-    console.error('❌ [Driver Queue] Update error:', error);
-    throw error;
+  while (attempt < retries) {
+    try {
+      attempt++;
+
+      console.log(`🔄 [Driver Queue] Updating entry (attempt ${attempt}/${retries})...`);
+      console.log(`   Queue ID: ${queueId}`);
+      console.log(`   Updates:`, updates);
+
+      const { data, error } = await supabase
+        .from('driver_assignment_queue')
+        .update(updates)
+        .eq('id', queueId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error(`❌ [Driver Queue] Update error (attempt ${attempt}):`, error);
+        console.error('   Error code:', error.code);
+        console.error('   Error message:', error.message);
+        console.error('   Error details:', error.details);
+
+        // Handle specific error cases
+        if (error.code === 'PGRST116') {
+          // Record not found - try to fetch it
+          console.warn('⚠️ [Driver Queue] Queue entry not found or already updated:', queueId);
+          const { data: existing } = await supabase
+            .from('driver_assignment_queue')
+            .select('*')
+            .eq('id', queueId)
+            .single();
+
+          if (existing) {
+            console.log('✅ [Driver Queue] Found existing entry, returning it');
+            return existing;
+          } else {
+            console.error('❌ [Driver Queue] Entry no longer exists');
+            return null;
+          }
+        }
+
+        // Handle 406 Not Acceptable (RLS policy issue)
+        if (error.message?.includes('406') || error.message?.includes('Not Acceptable')) {
+          console.error('❌ [Driver Queue] RLS Policy Error (406)');
+          console.error('   This usually means Row Level Security policies are blocking the operation');
+          console.error('   Run: supabase/migrations/fix_driver_queue_complete.sql to fix');
+
+          // On last attempt, try to fetch current state
+          if (attempt === retries) {
+            const { data: existing } = await supabase
+              .from('driver_assignment_queue')
+              .select('*')
+              .eq('id', queueId)
+              .maybeSingle();
+            return existing || null;
+          }
+
+          // Wait before retry for RLS issues
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+          continue;
+        }
+
+        // Handle constraint violations
+        if (error.code === '23514' || error.message?.includes('violates check constraint')) {
+          console.error('❌ [Driver Queue] CHECK Constraint Violation');
+          console.error('   Attempted status:', updates.status);
+          console.error('   This status is not allowed by database constraint');
+          console.error('   Run: supabase/migrations/fix_driver_queue_complete.sql to fix');
+          return null;
+        }
+
+        // For other errors, retry with exponential backoff
+        if (attempt < retries) {
+          const waitTime = 500 * attempt;
+          console.log(`⏳ [Driver Queue] Retrying in ${waitTime}ms...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          continue;
+        }
+
+        throw error;
+      }
+
+      console.log('✅ [Driver Queue] Update successful');
+      return data;
+
+    } catch (error) {
+      console.error(`❌ [Driver Queue] Unexpected error (attempt ${attempt}):`, error);
+
+      if (attempt >= retries) {
+        console.error('❌ [Driver Queue] All retry attempts exhausted');
+        // Return null instead of throwing to prevent crash
+        return null;
+      }
+
+      // Wait before retry
+      const waitTime = 500 * attempt;
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
   }
+
+  console.error('❌ [Driver Queue] Failed to update after all retries');
+  return null;
 };
 
 /**
@@ -329,10 +483,14 @@ export const callNextDriverInQueue = async (bookingId, bookingData) => {
     const driver = queueEntry.drivers;
 
     // Update queue status to calling
-    await updateQueueEntry(queueEntry.id, {
+    const updateResult = await updateQueueEntry(queueEntry.id, {
       status: 'calling',
       called_at: new Date().toISOString()
     });
+
+    if (!updateResult) {
+      console.warn('⚠️ [Driver Queue] Failed to update queue entry, but continuing with call...');
+    }
 
     // Make call to driver
     console.log(`📞 [Driver Queue] Calling driver: ${driver.first_name} ${driver.last_name}`);
@@ -390,6 +548,35 @@ export const callNextDriverInQueue = async (bookingId, bookingData) => {
  */
 export const autoAssignDriver = async (booking) => {
   try {
+    console.log('🚗 [Driver Assignment] Starting auto-assignment for booking:', booking.booking_id);
+
+    // CRITICAL: Check if this booking already has a queue or is already assigned
+    const { data: existingQueue, error: queueCheckError } = await supabase
+      .from('driver_assignment_queue')
+      .select('id, booking_id, status')
+      .eq('booking_id', booking.id)
+      .limit(1);
+
+    if (!queueCheckError && existingQueue && existingQueue.length > 0) {
+      console.log('⚠️ [Driver Assignment] Queue already exists for this booking');
+      console.log('   Existing queue entries:', existingQueue.length);
+      return {
+        success: false,
+        message: 'Driver assignment already in progress or completed for this booking',
+        alreadyProcessing: true
+      };
+    }
+
+    // Check if driver is already assigned
+    if (booking.driver_id) {
+      console.log('⚠️ [Driver Assignment] Driver already assigned to this booking');
+      return {
+        success: false,
+        message: 'Driver already assigned to this booking',
+        alreadyAssigned: true
+      };
+    }
+
     // Extract location from booking
     // Location is stored in remarks as "Location: lat, lng"
     let bookingLat, bookingLng;

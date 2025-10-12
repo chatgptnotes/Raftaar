@@ -136,9 +136,9 @@ const DriverQueueStatus = ({ bookingId, onStatusChange }) => {
       case 'calling':
         return 'Calling...';
       case 'rejected':
-        return 'Declined';
+        return 'Declined (Unavailable)';
       case 'no_answer':
-        return 'No Answer';
+        return 'No Answer (Unavailable)';
       case 'unclear':
         return 'Unclear Response';
       case 'pending':
@@ -224,7 +224,20 @@ const DriverQueueStatus = ({ bookingId, onStatusChange }) => {
                         View Analysis
                       </summary>
                       <pre className="mt-1 bg-white p-2 rounded border text-xs overflow-auto">
-                        {JSON.stringify(JSON.parse(entry.response_analysis), null, 2)}
+                        {(() => {
+                          try {
+                            // If it's already a string, parse it
+                            if (typeof entry.response_analysis === 'string') {
+                              const parsed = JSON.parse(entry.response_analysis);
+                              return JSON.stringify(parsed, null, 2);
+                            }
+                            // If it's already an object, just stringify it
+                            return JSON.stringify(entry.response_analysis, null, 2);
+                          } catch (e) {
+                            // If parsing fails, show the raw value
+                            return entry.response_analysis;
+                          }
+                        })()}
                       </pre>
                     </details>
                   )}
@@ -244,19 +257,46 @@ const DriverQueueStatus = ({ bookingId, onStatusChange }) => {
       </div>
 
       {/* Status Summary */}
-      <div className="text-xs text-gray-500 bg-gray-50 px-3 py-2 rounded-lg">
-        <strong>Status:</strong> {acceptedEntry ? (
-          <span className="text-green-600 font-semibold">
-            ✅ Driver assigned and WhatsApp location {whatsappStatus?.sent ? 'sent' : 'pending'}
-          </span>
+      <div className="bg-gray-50 px-4 py-3 rounded-lg border border-gray-200">
+        {acceptedEntry ? (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">✅</span>
+              <div className="flex-1">
+                <div className="font-bold text-green-700 text-base">
+                  Driver Accepted & Assigned
+                </div>
+                <div className="text-sm text-gray-700 mt-1">
+                  <strong>{acceptedEntry.drivers?.first_name} {acceptedEntry.drivers?.last_name}</strong>
+                  {' '}has accepted the booking
+                </div>
+                <div className="text-xs text-gray-500 mt-1 flex items-center gap-4">
+                  <span>📱 {acceptedEntry.drivers?.phone}</span>
+                  <span>🚗 {acceptedEntry.drivers?.vehicle_model} ({acceptedEntry.drivers?.vehicle_number})</span>
+                  <span>📏 {acceptedEntry.distance}</span>
+                </div>
+              </div>
+            </div>
+            {whatsappStatus?.sent && (
+              <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 px-3 py-2 rounded border border-green-200">
+                <span>📱</span>
+                <span className="font-semibold">WhatsApp location sent at {new Date(whatsappStatus.sentAt).toLocaleTimeString()}</span>
+              </div>
+            )}
+          </div>
         ) : queueEntries.some(e => e.status === 'calling') ? (
-          <span className="text-blue-600 font-semibold">
-            📞 Calling driver... Waiting for response
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-xl animate-pulse">📞</span>
+            <div>
+              <div className="font-semibold text-blue-700">Calling driver...</div>
+              <div className="text-xs text-gray-600 mt-0.5">Waiting for response and analyzing transcript</div>
+            </div>
+          </div>
         ) : (
-          <span className="text-gray-600">
-            ⏳ Processing queue...
-          </span>
+          <div className="flex items-center gap-2 text-gray-600">
+            <span className="text-xl">⏳</span>
+            <span className="text-sm">Processing driver queue...</span>
+          </div>
         )}
       </div>
     </div>

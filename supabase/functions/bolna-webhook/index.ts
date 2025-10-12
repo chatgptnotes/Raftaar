@@ -18,6 +18,14 @@ interface BolnaWebhookPayload {
   conversation_data?: {
     driver_response?: string; // "yes" or "no"
   };
+  extracted_data?: {
+    transcript?: Array<{
+      message: string;
+      speaker: string;
+    }>;
+    execution_id?: string;
+  };
+  summary?: string;
   metadata?: any;
 }
 
@@ -86,21 +94,71 @@ serve(async (req) => {
 
     // Determine driver response
     let driverResponse = 'no_answer'; // default
+    let transcriptText = '';
 
-    // Check conversation data for explicit yes/no
+    // ENHANCED: Check multiple possible transcript locations
+    console.log('🔍 [Bolna Webhook] Analyzing payload for transcript...');
+
+    // Method 1: Check conversation_data.driver_response
     if (conversation_data?.driver_response) {
       const response = conversation_data.driver_response.toLowerCase();
-      if (response.includes('yes')) {
+      transcriptText = response;
+      console.log('📝 [Bolna Webhook] Found in conversation_data.driver_response:', response);
+    }
+
+    // Method 2: Check payload.extracted_data.transcript (BOLNA FORMAT)
+    else if (payload.extracted_data?.transcript && Array.isArray(payload.extracted_data.transcript)) {
+      console.log('📝 [Bolna Webhook] Found transcript array in extracted_data');
+
+      // Extract all user messages
+      const userMessages = payload.extracted_data.transcript
+        .filter((msg: any) => msg.speaker === 'user')
+        .map((msg: any) => msg.message)
+        .join(' ');
+
+      transcriptText = userMessages.toLowerCase();
+      console.log('📝 [Bolna Webhook] User messages:', transcriptText);
+    }
+
+    // Method 3: Check payload.summary
+    else if (payload.summary) {
+      transcriptText = payload.summary.toLowerCase();
+      console.log('📝 [Bolna Webhook] Using summary:', transcriptText);
+    }
+
+    // Analyze transcript for YES/NO
+    if (transcriptText) {
+      // Positive keywords
+      const positiveKeywords = [
+        'yes', 'yeah', 'sure', 'okay', 'ok', 'fine', 'accept', 'available',
+        'i can', 'i will', 'i am available', 'i\'m available', 'on my way',
+        'coming', 'going to take', 'haan', 'ha', 'thik hai'
+      ];
+
+      // Negative keywords
+      const negativeKeywords = [
+        'no', 'not', 'busy', 'can\'t', 'cannot', 'unable', 'unavailable',
+        'nahi', 'nhi', 'refuse', 'decline', 'far', 'too far'
+      ];
+
+      const hasPositive = positiveKeywords.some(k => transcriptText.includes(k));
+      const hasNegative = negativeKeywords.some(k => transcriptText.includes(k));
+
+      if (hasPositive && !hasNegative) {
         driverResponse = 'yes';
-      } else if (response.includes('no')) {
+        console.log('✅ [Bolna Webhook] Analysis: ACCEPTED (found positive keywords)');
+      } else if (hasNegative && !hasPositive) {
         driverResponse = 'no';
+        console.log('❌ [Bolna Webhook] Analysis: DECLINED (found negative keywords)');
+      } else {
+        console.log('⚠️ [Bolna Webhook] Analysis: UNCLEAR (mixed or no keywords)');
       }
     }
 
     // Check call status
     if (call_status === 'completed' && status === 'success') {
       // Call completed successfully - check if we got a response
-      if (driverResponse === 'no_answer') {
+      if (driverResponse === 'no_answer' && !transcriptText) {
         // If no explicit response captured, treat as no answer
         console.log('⚠️ [Bolna Webhook] Call completed but no clear response');
         driverResponse = 'no_answer';
@@ -111,7 +169,7 @@ serve(async (req) => {
       driverResponse = 'no_answer';
     }
 
-    console.log(`🎤 [Bolna Webhook] Driver response determined: ${driverResponse}`);
+    console.log(`🎤 [Bolna Webhook] Final driver response: ${driverResponse}`);
 
     // Handle driver response
     if (driverResponse === 'yes') {

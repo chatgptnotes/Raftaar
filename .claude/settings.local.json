@@ -1,7 +1,14 @@
 {
   "permissions": {
     "allow": [
-      "Read(//c/Users/admin/Downloads/**)"
+      "Read(//c/Users/admin/Downloads/**)",
+      "Read(//var/folders/2h/hkkt_6m5723fk6whtjx7pk_w0000gp/T/TemporaryItems/NSIRD_screencaptureui_jXQG0E/**)",
+      "Read(//var/folders/2h/hkkt_6m5723fk6whtjx7pk_w0000gp/T/TemporaryItems/NSIRD_screencaptureui_5GxFqX/**)",
+      "Read(//var/folders/2h/hkkt_6m5723fk6whtjx7pk_w0000gp/T/TemporaryItems/NSIRD_screencaptureui_HtOWz2/**)",
+      "Read(//var/folders/2h/hkkt_6m5723fk6whtjx7pk_w0000gp/T/TemporaryItems/NSIRD_screencaptureui_OoNnrD/**)",
+      "Read(//var/folders/2h/hkkt_6m5723fk6whtjx7pk_w0000gp/T/TemporaryItems/NSIRD_screencaptureui_p3PSyz/**)",
+      "Bash(npx supabase:*)",
+      "Read(//var/folders/2h/hkkt_6m5723fk6whtjx7pk_w0000gp/T/TemporaryItems/NSIRD_screencaptureui_lRPSMq/**)"
     ],
     "deny": [],
     "ask": []

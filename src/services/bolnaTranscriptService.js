@@ -30,9 +30,40 @@ export const fetchAgentExecutions = async () => {
     }
 
     const data = await response.json();
-    console.log('✅ [Bolna Transcript] Fetched executions:', data.length || 0);
 
-    return data;
+    // Log the actual response structure for debugging
+    console.log('📦 [Bolna Transcript] Raw API response type:', typeof data);
+    console.log('📦 [Bolna Transcript] Raw API response keys:', Object.keys(data || {}));
+
+    // Handle different response formats
+    let executions = [];
+
+    if (Array.isArray(data)) {
+      // Response is directly an array
+      executions = data;
+      console.log('✅ [Bolna Transcript] Response is direct array');
+    } else if (data && Array.isArray(data.executions)) {
+      // Response is an object with executions array
+      executions = data.executions;
+      console.log('✅ [Bolna Transcript] Response has executions field');
+    } else if (data && Array.isArray(data.data)) {
+      // Response might have data field containing array
+      executions = data.data;
+      console.log('✅ [Bolna Transcript] Response has data field');
+    } else {
+      console.warn('⚠️ [Bolna Transcript] Unexpected response format:', data);
+      executions = [];
+    }
+
+    console.log('✅ [Bolna Transcript] Fetched executions count:', executions.length);
+
+    // Log first execution object to see its structure
+    if (executions.length > 0) {
+      console.log('🔍 [Bolna Transcript] First execution object keys:', Object.keys(executions[0]));
+      console.log('🔍 [Bolna Transcript] First execution sample:', JSON.stringify(executions[0], null, 2));
+    }
+
+    return executions;
   } catch (error) {
     console.error('❌ [Bolna Transcript] Failed to fetch executions:', error);
     return [];
@@ -49,13 +80,36 @@ export const fetchExecutionById = async (executionId) => {
     const executions = await fetchAgentExecutions();
 
     console.log('🔍 [Bolna Transcript] Searching for execution:', executionId);
+
+    // Validate that executions is an array
+    if (!Array.isArray(executions)) {
+      console.error('❌ [Bolna Transcript] executions is not an array:', typeof executions);
+      console.error('📦 [Bolna Transcript] executions value:', executions);
+      return null;
+    }
+
     console.log('📊 [Bolna Transcript] Total executions available:', executions.length);
 
-    const execution = executions.find(ex => ex.execution_id === executionId);
+    // Try different possible field names for execution ID
+    // Different APIs might use: execution_id, id, executionId, uuid, etc.
+    const execution = executions.find(ex =>
+      ex.execution_id === executionId ||
+      ex.id === executionId ||
+      ex.executionId === executionId ||
+      ex.uuid === executionId
+    );
 
     if (!execution) {
       console.warn('⚠️ [Bolna Transcript] Execution not found:', executionId);
-      console.log('📋 [Bolna Transcript] Available execution IDs:', executions.map(ex => ex.execution_id));
+      if (executions.length > 0) {
+        // Try to show IDs using all possible field names
+        console.log('📋 [Bolna Transcript] Available execution IDs (execution_id):', executions.map(ex => ex.execution_id));
+        console.log('📋 [Bolna Transcript] Available IDs (id):', executions.map(ex => ex.id));
+        console.log('📋 [Bolna Transcript] Available IDs (executionId):', executions.map(ex => ex.executionId));
+        console.log('📋 [Bolna Transcript] Sample execution object:', JSON.stringify(executions[0], null, 2));
+      } else {
+        console.log('📋 [Bolna Transcript] No executions available yet');
+      }
       return null;
     }
 
@@ -64,6 +118,7 @@ export const fetchExecutionById = async (executionId) => {
     return execution;
   } catch (error) {
     console.error('❌ [Bolna Transcript] Failed to fetch execution:', error);
+    console.error('🔍 [Bolna Transcript] Error details:', error.message, error.stack);
     return null;
   }
 };
@@ -240,13 +295,13 @@ export const analyzeDriverResponse = (transcript) => {
  * @param {number} pollInterval - Poll interval in seconds (default: 5)
  * @returns {Promise<object>} Execution with transcript and analysis
  */
-export const waitForCallCompletion = async (executionId, maxWaitTime = 120, pollInterval = 5) => {
+export const waitForCallCompletion = async (executionId, maxWaitTime = 60, pollInterval = 2) => {
   const startTime = Date.now();
   const maxWaitMs = maxWaitTime * 1000;
   const pollIntervalMs = pollInterval * 1000;
 
   console.log(`⏳ [Bolna Transcript] Waiting for call completion: ${executionId}`);
-  console.log(`   Max wait: ${maxWaitTime}s, Poll interval: ${pollInterval}s`);
+  console.log(`   Max wait: ${maxWaitTime}s, Poll interval: ${pollInterval}s (FAST MODE)`);
 
   while (Date.now() - startTime < maxWaitMs) {
     try {
@@ -262,11 +317,12 @@ export const waitForCallCompletion = async (executionId, maxWaitTime = 120, poll
       console.log('🔍 [Bolna Transcript] Checking completion status...');
       console.log('   Execution status:', execution.status);
       console.log('   Hangup by:', execution.hangup_by);
+      console.log('   Has transcript:', !!execution.conversation_data);
+      console.log('   Call duration:', execution.duration_in_seconds || 'N/A');
 
-      const isCompleted = execution.status === 'completed' ||
-                         execution.status === 'Completed' ||
-                         execution.hangup_by !== null ||
-                         execution.hangup_by !== undefined;
+      // Call is completed only when status is completed AND hangup_by has a value
+      const isCompleted = (execution.status === 'completed' || execution.status === 'Completed') &&
+                         (execution.hangup_by != null);  // Checks both null and undefined
 
       if (isCompleted) {
         console.log('✅ [Bolna Transcript] Call completed!');
@@ -309,10 +365,21 @@ export const waitForCallCompletion = async (executionId, maxWaitTime = 120, poll
   }
 
   console.warn('⏱️ [Bolna Transcript] Timeout waiting for call completion');
+  console.warn('💡 [Bolna Transcript] This usually means:');
+  console.warn('   1. Call was not answered by driver');
+  console.warn('   2. Execution ID not found in Bolna API');
+  console.warn('   3. Call is taking longer than expected');
+
+  // Return timeout with analysis suggesting no answer
   return {
     success: false,
     error: 'Timeout waiting for call completion',
-    executionId
+    executionId,
+    analysis: {
+      response: 'NO_RESPONSE',
+      confidence: 'high',
+      reason: 'Call timeout - likely not answered or execution not found'
+    }
   };
 };
 
